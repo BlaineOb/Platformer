@@ -1,123 +1,32 @@
 import arcade
+import mapMaker
+import math
 
 SCREEN_WIDTH = 1200
 SCREEN_HEIGHT = 900
 VIEWPORT_MARGIN = 40
 SPRITE_SCALING = .5
+BULLET_SPEED = 11
 
+#TODO:
 """
 -Level Design
+    ~Vertical Level
 -Enemies
--Animation for character/springs
+-Animation for springs?
+-Fix collision box for downward snow spikes -- it's too big
+-Title Screen
+-Level Select
+-Saves
+-Death penalty
+-Boss Fight
+-Ladders
 """
 
-
-def get_map(map):
-    map_file = open(map)
-    map_array = []
-    for line in map_file:
-        line = line.strip()
-        map_row = line.split(",")
-        for index, item in enumerate(map_row):
-            map_row[index] = int(item)
-        map_array.append(map_row)
-
-    return map_array
-
-def draw_map(app, map):
-        map_array = get_map(map)
-
-        for row_index, row in enumerate(map_array):
-            for column_index, item in enumerate(row):
-
-                if item == 9:
-                    continue
-                elif item == 0:
-                    wall = arcade.Sprite("images/grass.png",
-                                         SPRITE_SCALING)
-                elif item == 1:
-                    wall = arcade.Sprite("images/stone.png",
-                                         SPRITE_SCALING)
-                elif item == 2:
-                    wall = arcade.Sprite("images/grassMid.png",
-                                         SPRITE_SCALING)
-                elif item == 3:
-                    wall = arcade.Sprite("images/grassCenter.png",
-                                         SPRITE_SCALING)
-                elif item == 4:
-                    wall = arcade.Sprite("images/stoneCenter.png",
-                                         SPRITE_SCALING)
-                elif item == 5:
-                    death_spot = arcade.Sprite("images/spikes.png",
-                                               SPRITE_SCALING + .3)
-                    death_spot.right = column_index * 64 - 5
-                    death_spot.top = (7 - row_index) * 64 + 442
-                    app.all_sprites_list.append(death_spot)
-                    app.death_spots.append(death_spot)
-                elif item == 6:
-                    plant = arcade.Sprite("images/plant.png",
-                                          SPRITE_SCALING + .5)
-                    plant.right = column_index * 64
-                    plant.top = (7 - row_index) * 64 + 450
-                    app.all_sprites_list.append(plant)
-                elif item == 7:
-                    wall = wall = arcade.Sprite("images/iceBlock.png",
-                                         SPRITE_SCALING * 1.82)
-
-                elif item == 10:
-                    new_item = arcade.Sprite("images/hudKey_yellow.png",
-                                             SPRITE_SCALING)
-                    new_item.right = column_index * 64
-                    new_item.top = (7 - row_index) * 64 + 450
-                    app.items.append(new_item)
-                    app.all_sprites_list.append(new_item)
-                    app.yellow_key = new_item
-
-                elif item == 11:
-                    wall = arcade.Sprite("images/doorClosed_mid.png",
-                                         SPRITE_SCALING)
-                    app.wood_door = wall
-                elif item == 12:
-                    spring = arcade.Sprite("images/springboardUp.png",
-                                           SPRITE_SCALING + .5)
-                    spring.right = column_index * 64
-                    spring.top = (7 - row_index) * 64 + 455
-                    app.springs.append(spring)
-                    app.all_sprites_list.append(spring)
-                elif item == 13:
-                    goal = arcade.Sprite("images/flagBlue.png", SPRITE_SCALING * 2)
-                    goal.right = column_index * 64
-                    goal.top = (7 - row_index) * 64 + 455
-                    app.goals.append(goal)
-                    app.all_sprites_list.append(goal)
-                elif item == 14:
-                    coin = arcade.Sprite("images/gemRed.png", SPRITE_SCALING * 2)
-                    coin.right = column_index * 64
-                    coin.top = (7 - row_index) * 64 + 450
-                    app.all_sprites_list.append(coin)
-
-                if (item is 0) or (item is 1) or (item is 2) \
-                        or (item is 3) or (item is 4) or (item is 11) or (item is 7):
-                    wall.right = column_index * 64
-                    wall.top = (7 - row_index) * 64 + 450
-                    app.all_sprites_list.append(wall)
-                    app.walls.append(wall)
-
-class Player(arcade.Sprite):
-
-    key = None
-
-    def update(self, dt):
-
-        if self.left < 0:
-            self.left = 0
-        elif self.right > SCREEN_WIDTH + 3501:
-            self.right = SCREEN_WIDTH + 3500
-
-        if self.bottom < 0:
-            self.bottom = 0
-        elif self.top > SCREEN_HEIGHT - 1:
-            self.top = SCREEN_HEIGHT - 1
+class Bullet(arcade.Sprite):
+    def update(self):
+        self.center_x += self.change_x
+        self.center_y += self.change_y
 
 class MyApplication(arcade.Window):
 
@@ -125,7 +34,10 @@ class MyApplication(arcade.Window):
         super().__init__(width, height)
         self.player = None
         self.walls = None
-        self.death_spots = None
+        self.death_spots_up = None
+        self.death_spots_down = None
+        self.bullets = None
+        self.destructibles = None
         self.items = None
         self.springs = None
         self.goals = None
@@ -133,13 +45,50 @@ class MyApplication(arcade.Window):
         self.background2 = None
         self.background3 = None
         self.background4 = None
+        self.background5 = None
+        self.background6 = None
+        self.background7 = None
         self.physics_engine = None
         self.all_sprites_list = None
-        self.yellow_key = None
-        self.wood_door = None
+        self.keys = None
+        self.gems = None
+        self.doors = None
+        self.x_traveled = 0
+        self.mouse_x = 0
+        self.mouse_y = 0
+        self.num_keys = 0
         self.level = 1
         self.view_bottom = 0
         self.view_left = 0
+
+    def setup_player(self):
+
+        self.player.key = None
+        self.player.lives = 5
+        self.player.gems = 0
+
+        self.player.center_x = 4000
+        self.player.center_y = 300
+
+        self.player.stand_right_textures = []
+        self.player.stand_right_textures.append(arcade.load_texture("images/player_stand.png",
+                                                             scale=.5))
+        self.player.stand_left_textures = []
+        self.player.stand_left_textures.append(arcade.load_texture("images/player_stand.png",
+                                                            scale=.5, mirrored=True))
+        self.player.walk_right_textures = []
+        self.player.walk_right_textures.append(arcade.load_texture("images/player_walk1.png",
+                                                            scale=.5, mirrored=False))
+        self.player.walk_right_textures.append(arcade.load_texture("images/player_walk2.png",
+                                                            scale=.5, mirrored=False))
+        self.player.walk_left_textures = []
+        self.player.walk_left_textures.append(arcade.load_texture("images/player_walk1.png",
+                                                                   scale=.5, mirrored=True))
+        self.player.walk_left_textures.append(arcade.load_texture("images/player_walk2.png",
+                                                                   scale=.5, mirrored=True))
+        self.player.walk_up_textures = []
+        self.player.walk_up_textures.append(arcade.load_texture("images/player_jump.png",
+                                                                  scale=.5, mirrored=False))
 
     def setup(self):
 
@@ -147,19 +96,25 @@ class MyApplication(arcade.Window):
         self.all_sprites_list = arcade.SpriteList()
         self.items = arcade.SpriteList()
         self.springs = arcade.SpriteList()
-        self.death_spots = arcade.SpriteList()
+        self.gems = arcade.SpriteList()
+        self.death_spots_up = arcade.SpriteList()
+        self.death_spots_down = arcade.SpriteList()
+        self.bullets = arcade.SpriteList()
+        self.destructibles = arcade.SpriteList()
         self.goals = arcade.SpriteList()
-        self.player = Player("images/player_stand.png", 0.5)
-        self.player.center_x = 200
-        self.player.center_y = 355
+        self.keys = arcade.SpriteList()
+        self.doors = arcade.SpriteList()
+        self.player = arcade.AnimatedWalkingSprite()
+        self.setup_player()
 
         self.background = arcade.load_texture("images/colored_grass.png")
         self.background2 = arcade.load_texture("images/colored_land.png")
         self.background3 = arcade.load_texture("images/colored_grass.png")
         self.background4 = arcade.load_texture("images/colored_land.png")
+        self.background5 = arcade.load_texture("images/colored_land.png")
         self.all_sprites_list.append(self.player)
 
-        draw_map(self, "map.csv")
+        mapMaker.draw_map(self, "map.csv")
 
         self.physics_engine = arcade.PhysicsEnginePlatformer(self.player,
                                                              self.walls, 1.0)
@@ -167,7 +122,7 @@ class MyApplication(arcade.Window):
 
     def on_draw(self):
         arcade.start_render()
-        # load backgrounds 1-4
+        # load backgrounds 1-6
         arcade.draw_texture_rectangle(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2,
                                       SCREEN_WIDTH, SCREEN_HEIGHT, self.background)
 
@@ -175,10 +130,20 @@ class MyApplication(arcade.Window):
                                       SCREEN_WIDTH, SCREEN_HEIGHT, self.background2)
 
         arcade.draw_texture_rectangle(SCREEN_WIDTH * 2.25, SCREEN_HEIGHT // 2,
-                                      SCREEN_WIDTH, SCREEN_HEIGHT, self.background2)
+                                      SCREEN_WIDTH, SCREEN_HEIGHT, self.background3)
 
         arcade.draw_texture_rectangle(SCREEN_WIDTH * 3, SCREEN_HEIGHT // 2,
-                                      SCREEN_WIDTH, SCREEN_HEIGHT, self.background2)
+                                      SCREEN_WIDTH, SCREEN_HEIGHT, self.background4)
+
+        arcade.draw_texture_rectangle(SCREEN_WIDTH * 3.75, SCREEN_HEIGHT // 2,
+                                      SCREEN_WIDTH, SCREEN_HEIGHT, self.background5)
+        if (self.background6 is not None):
+            arcade.draw_texture_rectangle(SCREEN_WIDTH * 4.8754, SCREEN_HEIGHT // 2,
+                                          SCREEN_WIDTH * 1.25, SCREEN_HEIGHT, self.background6)
+
+        if (self.background7 is not None):
+            arcade.draw_texture_rectangle(SCREEN_WIDTH * 6, SCREEN_HEIGHT // 2,
+                                          SCREEN_WIDTH, SCREEN_HEIGHT, self.background7)
 
         self.all_sprites_list.draw()
         self.draw_text()
@@ -191,30 +156,82 @@ class MyApplication(arcade.Window):
             t1 = arcade.create_text("Level 2", arcade.color.BLACK, 20)
             arcade.render_text(t1, 200, 860)
 
+    def on_mouse_motion(self, x: float, y: float, dx: float, dy: float):
+        self.mouse_x = x
+        self.mouse_y = y
+
     def on_key_press(self, key, modifiers):
 
-        if key == arcade.key.UP:
+        if key == arcade.key.W:
+            # Jump up
             if self.physics_engine.can_jump():
                 self.player.change_y = 21
-        elif key == arcade.key.DOWN:
+        elif key == arcade.key.S:
+            # Go down
             self.player.change_y = -10
-        elif key == arcade.key.LEFT:
+        elif key == arcade.key.A:
+            # Go Left
             self.player.change_x = -10
-        elif key == arcade.key.RIGHT:
+        elif key == arcade.key.D:
+            # Go Right
             self.player.change_x = 10
+        elif key == arcade.key.F:
+            # Fire Bullet
+            bullet = Bullet("images/laserPurple.png")
+
+            start_x = self.player.center_x
+            start_y = self.player.center_y
+            bullet.center_x = start_x
+            bullet.center_y = start_y
+
+            dest_x = self.mouse_x + self.view_left
+            dest_y = self.mouse_y
+            print(dest_x)
+            print(dest_y)
+
+            x_diff = dest_x - start_x
+            y_diff = dest_y - start_y
+            angle = math.atan2(y_diff, x_diff)
+            print(angle)
+
+            bullet.angle = math.degrees(angle)
+            bullet.change_x = math.cos(angle) * BULLET_SPEED
+            bullet.change_y = math.sin(angle) * BULLET_SPEED
+
+            self.all_sprites_list.append(bullet)
+            self.bullets.append(bullet)
+
 
     def on_key_release(self, key, modifiers):
         """Called when the user releases a key. """
 
-        if key == arcade.key.UP or key == arcade.key.DOWN:
+        if key == arcade.key.W or key == arcade.key.S:
             self.player.change_y = 0
-        elif key == arcade.key.LEFT or key == arcade.key.RIGHT:
+        elif key == arcade.key.A or key == arcade.key.D:
             self.player.change_x = 0
+
+    def on_mouse_press(self, x: float, y: float, button: int, modifiers: int):
+        print(self.player.center_x + x, y)
+
+    def update_player(self, dt):
+
+        if self.player.left < 1:
+            self.player.left = 1
+        elif self.player.right > SCREEN_WIDTH + 5501:
+            self.player.right = SCREEN_WIDTH + 5500
+
+        if self.player.bottom < 0:
+            self.player.bottom = 0
+        elif self.player.top > SCREEN_HEIGHT - 1:
+            self.player.top = SCREEN_HEIGHT - 1
 
     def update(self, dt):
 
-        self.player.update(dt)
+        self.update_player(dt)
+        self.player.update_animation()
         self.physics_engine.update()
+
+        # if player has no lives left, end game here
 
         # --- Manage Scrolling ---
 
@@ -234,26 +251,69 @@ class MyApplication(arcade.Window):
             self.view_left += self.player.right - right_bndry
             changed = True
 
-        if changed:
+        if changed and self.view_left > 0:
             arcade.set_viewport(self.view_left,
                                 SCREEN_WIDTH + self.view_left,
                                 self.view_bottom,
                                 SCREEN_HEIGHT + self.view_bottom)
+        # update bullets
+        for bullet in self.bullets:
+
+            bullet.update()
+
+            hit_list = arcade.check_for_collision_with_list(bullet, self.destructibles)
+
+            if len(hit_list) > 0:
+                bullet.kill()
+
+            for destructible in hit_list:
+                destructible.kill()
+
+            if bullet.left > self.player.center_x + SCREEN_WIDTH or bullet.right < 0:
+                bullet.kill()
 
         # check for collision with key
-        if arcade.check_for_collision(self.player, self.yellow_key):
-            for p in self.walls:
-                if p is self.wood_door:
-                    self.walls.remove(p)
-            self.yellow_key.kill()
+        if arcade.check_for_collision_with_list(self.player, self.keys):
+            collision_list = arcade.check_for_collision_with_list(self.player, self.keys)
+            for key in collision_list:
+                self.num_keys += 1
+                key.kill()
+            # make all doors open
+            for door in self.doors:
+                for wall in self.walls:
+                    if wall is door:
+                        self.walls.remove(wall)
 
-        # check for collision with door 1
-        if arcade.check_for_collision(self.player, self.wood_door):
-            self.wood_door.kill()
+        # check for collision with doors
+        if arcade.check_for_collision_with_list(self.player, self.doors):
+            if self.num_keys > 0:
+                self.num_keys -= 1
+                collision_list = arcade.check_for_collision_with_list(self.player, self.doors)
+                for door in collision_list:
+                    door.kill()
 
-        # check for collision with death spots
-        if arcade.check_for_collision_with_list(self.player, self.death_spots):
+                # close all doors again if no more keys are left
+                for door in self.doors:
+                    self.walls.append(door)
+
+        # check for collision with gems
+        if arcade.check_for_collision_with_list(self.player, self.gems):
+            collision_list = arcade.check_for_collision_with_list(self.player, self.gems)
+            for gem in collision_list:
+                gem.kill()
+                self.player.gems += 1
+                print(self.player.gems)
+
+        # check for collision with upward facing death spots
+        if arcade.check_for_collision_with_list(self.player, self.death_spots_up):
             self.player.change_y = 15
+            self.player.lives -= 1
+            print("player hit")
+
+        # check for collision with downward facing death spots
+        if arcade.check_for_collision_with_list(self.player, self.death_spots_down):
+            self.player.change_y = -15
+            self.player.lives -= 1
             print("player hit")
 
         # check for collision with springs
@@ -274,20 +334,63 @@ class MyApplication(arcade.Window):
             self.walls = None
             self.walls = arcade.SpriteList()
             self.all_sprites_list.append(self.player)
+            self.death_spots_up = None
+            self.death_spots_up = arcade.SpriteList()
+            self.death_spots_down = None
+            self.death_spots_down = arcade.SpriteList()
+            self.springs = None
+            self.springs = arcade.SpriteList()
 
-            # change old variables
-            self.level += 1
-            self.background = arcade.load_texture("images/bg_grasslands.png")
-            self.background2 = arcade.load_texture("images/bg_grasslands.png")
-            self.background3 = arcade.load_texture("images/bg_grasslands.png")
+            self.level += 3
 
-            # draw new level
-            draw_map(self, "map2.csv")
-            self.all_sprites_list.draw()
-            self.physics_engine = arcade.PhysicsEnginePlatformer(self.player,
-                                                                 self.walls, 1.0)
+            if (self.level == 2) :
+                # change old variables
+                self.background = arcade.load_texture("images/glacial_mountains.png")
+                self.background2 = arcade.load_texture("images/glacial_mountains.png")
+                self.background3 = arcade.load_texture("images/glacial_mountains.png")
+                self.background4 = arcade.load_texture("images/glacial_mountains.png")
+                self.background5 = arcade.load_texture("images/glacial_mountains.png")
+
+                # draw new level
+                mapMaker.draw_map(self, "map2.csv")
+                self.all_sprites_list.draw()
+                self.physics_engine = arcade.PhysicsEnginePlatformer(self.player,
+                                                                     self.walls, 1.0)
+            #TODO: Sort out load order of levels
+            elif (self.level == 3):
+                # change old variables
+                self.background = arcade.load_texture("images/colored_grass.png")
+                self.background2 = arcade.load_texture("images/colored_land.png")
+                self.background3 = arcade.load_texture("images/colored_grass.png")
+                self.background4 = arcade.load_texture("images/colored_land.png")
+                self.background5 = arcade.load_texture("images/colored_land.png")
+                self.background6 = arcade.load_texture("images/colored_grass.png")
+                self.background7 = arcade.load_texture("images/colored_grass.png")
+
+                # draw new level
+                mapMaker.draw_map(self, "map3.csv")
+                self.all_sprites_list.draw()
+                self.physics_engine = arcade.PhysicsEnginePlatformer(self.player,
+                                                                     self.walls, 1.0)
+
+            elif (self.level == 4):
+                # change old variables
+                self.background = arcade.load_texture("images/sea.png")
+                self.background2 = arcade.load_texture("images/sea.png")
+                self.background3 = arcade.load_texture("images/sea.png")
+                self.background4 = arcade.load_texture("images/sea.png")
+                self.background5 = arcade.load_texture("images/sea.png")
+                self.background6 = arcade.load_texture("images/sea.png")
+                self.background7 = arcade.load_texture("images/sea.png")
+
+                # draw new level
+                mapMaker.draw_map(self, "map4.csv")
+                self.all_sprites_list.draw()
+                self.physics_engine = arcade.PhysicsEnginePlatformer(self.player,
+                                                                     self.walls, 1.0)
+
             # spawn player at start of new level
-            self.player.center_x = 200
+            self.player.center_x = 550
             self.player.center_y = 355
 
 
