@@ -1,10 +1,6 @@
 # Platformer
-Platformer game currently in it's early stages. Written in Python using the arcade library. All artwork used is from http://kenney.nl.
+Platformer game in progress. Written in Python using the arcade library. All artwork used is from http://kenney.nl or https://itch.io/game-assets/free
 
-I've finished most of the fundamentals, and am now focusing on how to properly design levels. There are lots of big things still to implement, such as:
+Development continues. It's increasingly difficult to keep my expectations in check as I tend to think of lots of crazy ideas but have no real way to implement most of them. Maybe one day...
 
--Enemies
--Moving Platforms
--Player Health
--Collectibles(coins or gems)
--Animations
+As for now, I'm trying to add more features to game to make the levels longer and more distinct. I'm also trying to add combat of some sort into the game, so that boss battles can be implemented.
